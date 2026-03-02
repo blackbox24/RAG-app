@@ -6,6 +6,10 @@ app = FastAPI(title="RAG Support Agent - Minimal Version")
 class PromptRequest(BaseModel):
     prompt: str
 
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the RAG Support Agent API!", "docs": "/docs"}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "message": "Backend is running!"}
