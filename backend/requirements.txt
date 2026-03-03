@@ -1,3 +1,20 @@
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
 pydantic
+pydantic-settings
+
+# PDF parsing
+pdfplumber
+pytesseract
+Pillow
+
+faiss-cpu
+numpy
+
+gradientai
+
+python-dotenv
+boto3 
+tiktoken
+langdetect 
