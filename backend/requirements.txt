@@ -1,4 +1,4 @@
-fastapi
+fastapi[standard]
 uvicorn[standard]
 python-multipart
 pydantic
@@ -17,4 +17,6 @@ gradientai
 python-dotenv
 boto3 
 tiktoken
-langdetect 
+langdetect
+python-decouple
+pdf2image
