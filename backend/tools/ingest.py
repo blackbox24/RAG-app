@@ -10,7 +10,7 @@ import pytesseract
 from PIL import Image
 import numpy as np
 from langdetect import detect
-from gradientai import Gradient
+from gradient import Gradient
 
 from config.config import get_settings
 from tools.retrieval import VectorStore
@@ -111,21 +111,19 @@ def detect_risky_clauses(chunks: List[dict]) -> List[str]:
 
 def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
     """
-    Use Gradient AI embeddings.
-    WHY Gradient: hackathon sponsor, earns judging points.
-    WHY batch: reduces API calls, faster ingestion.
+    Use DigitalOcean Gradient AI embeddings.
     """
-    with Gradient(
-        access_token=settings.gradient_access_token,
-    ) as gradient:
-        model = gradient.get_embeddings_model(slug="bge-large")
-        texts = [c["text"] for c in chunks]
-        # Batch in groups of 32 to avoid rate limits
-        embeddings = []
-        for i in range(0, len(texts), 32):
-            batch = texts[i:i+32]
-            result = model.embed(inputs=[{"input": t} for t in batch])
-            embeddings.extend([e.embedding for e in result.embeddings])
+    client = Gradient(model_access_key=settings.gradient_access_token)
+    texts = [c["text"] for c in chunks]
+    # Batch in groups of 32
+    embeddings = []
+    for i in range(0, len(texts), 32):
+        batch = texts[i:i+32]
+        response = client.embeddings.create(
+            model=settings.embedding_model_slug,
+            input=batch
+        )
+        embeddings.extend([e.embedding for e in response.data])
     return [np.array(e, dtype=np.float32) for e in embeddings]
 
 def ingest_document(file_bytes: bytes, filename: str) -> dict:

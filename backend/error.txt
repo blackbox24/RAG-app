@@ -1,0 +1,6 @@
+https://api.digitalocean.com/v2/gen-ai
+Response:
+{"id":"not_found","message":"Your request could not be routed."}
+
+https://inference.do-ai.run/
+{"error":{"message":"route or method not supported: GET /","type":"not_found_error"},"message":"route or method not supported: GET /","status_code":404}

@@ -12,8 +12,7 @@ Pillow
 faiss-cpu
 numpy
 
-gradientai
-
+gradient-adk
 python-dotenv
 boto3 
 tiktoken

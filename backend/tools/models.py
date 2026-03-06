@@ -1,7 +1,7 @@
 # WHY separate models.py: prompt engineering is its own discipline.
 # Keeping prompts here means you can tune them without touching business logic.
 
-from gradientai import Gradient
+from gradient import Gradient
 from typing import List
 from config.config import get_settings
 from tools.retrieval import VectorStore, embed_query
@@ -64,13 +64,13 @@ def answer_query(query: str, session_id: str, doc_id: str = None,
 
     prompt = build_prompt(query, hits, mode)
 
-    with Gradient(access_token=settings.gradient_access_token) as gradient:
-        model = gradient.get_base_model(model_slug=settings.gradient_model_slug)
-        result = model.complete(
-            query=prompt,
-            max_generated_token_count=settings.max_tokens
-        )
-    answer_text = result.generated_output
+    client = Gradient(model_access_key=settings.gradient_access_token)
+    response = client.chat.completions.create(
+        model=settings.gradient_model_slug,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=settings.max_tokens
+    )
+    answer_text = response.choices[0].message.content
 
     citations = [{
         "source": h["metadata"]["source"],

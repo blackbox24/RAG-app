@@ -7,7 +7,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 from typing import List, Tuple, Optional
-from gradientai import Gradient
+from gradient import Gradient
 
 from config.config import get_settings
 
@@ -68,7 +68,9 @@ class VectorStore:
         return results
 
 def embed_query(query: str) -> np.ndarray:
-    with Gradient(access_token=get_settings().gradient_access_token) as gradient:
-        model = gradient.get_embeddings_model(slug="bge-large")
-        result = model.embed(inputs=[{"input": query}])
-        return np.array(result.embeddings[0].embedding, dtype=np.float32)
+    client = Gradient(model_access_key=settings.gradient_access_token)
+    response = client.embeddings.create(
+        model=settings.embedding_model_slug,
+        input=[query]
+    )
+    return np.array(response.data[0].embedding, dtype=np.float32)
