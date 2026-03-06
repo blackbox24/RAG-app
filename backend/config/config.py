@@ -1,15 +1,16 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from functools import lru_cache
 
 class Settings(BaseSettings):
     # Gradient AI
-    gradient_access_token: str
-    gradient_workspace_id: str
+    gradient_access_token: str = Field(validation_alias="GRADIENT_ACCESS_TOKEN")
+    gradient_workspace_id: str = Field(validation_alias="GRADIENT_WORKSPACE_ID")
     gradient_model_slug: str = "llama3-8b-chat"  # use available Gradient model
 
     # DigitalOcean Spaces (S3-compatible doc storage)
-    spaces_key: str
-    spaces_secret: str 
+    spaces_key: str = Field(validation_alias="SPACES_KEY")
+    spaces_secret: str = Field(validation_alias="SPACES_SECRET")
     spaces_bucket: str = "lexai-docs"
     spaces_region: str = "nyc3"
     spaces_endpoint: str = "https://nyc3.digitaloceanspaces.com"
