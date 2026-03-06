@@ -115,7 +115,9 @@ def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
     WHY Gradient: hackathon sponsor, earns judging points.
     WHY batch: reduces API calls, faster ingestion.
     """
-    with Gradient(access_token=settings.gradient_access_token) as gradient:
+    with Gradient(
+        access_token=settings.gradient_access_token,
+    ) as gradient:
         model = gradient.get_embeddings_model(slug="bge-large")
         texts = [c["text"] for c in chunks]
         # Batch in groups of 32 to avoid rate limits

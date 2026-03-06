@@ -72,9 +72,13 @@ async def ingest(
             Body=file_bytes,
             ACL="private"  # WHY private: contracts are sensitive documents
         )
+    except ValueError as e:
+        raise HTTPException(status_code=500,detail=f"Spaces upload warning: {e}")
+
     except ClientError as e:
         # Don't fail ingestion if Spaces upload fails — continue with local FAISS
         print(f"Spaces upload warning: {e}")
+        raise HTTPException(status_code=500,detail="Spaces upload warning")
 
     result = ingest_document(file_bytes, file.filename)
     return IngestResponse(**result)

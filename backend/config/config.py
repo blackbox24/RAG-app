@@ -1,6 +1,10 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from functools import lru_cache
+from pathlib import Path
+import os
+
+BASE_DIR = Path(__file__).resolve().parents[0].parent
 
 class Settings(BaseSettings):
     # Gradient AI
@@ -11,9 +15,9 @@ class Settings(BaseSettings):
     # DigitalOcean Spaces (S3-compatible doc storage)
     spaces_key: str = Field(validation_alias="SPACES_KEY")
     spaces_secret: str = Field(validation_alias="SPACES_SECRET")
-    spaces_bucket: str = "lexai-docs"
-    spaces_region: str = "nyc3"
-    spaces_endpoint: str = "https://nyc3.digitaloceanspaces.com"
+    spaces_bucket: str = Field(validation_alias="SPACES_BUCKET")
+    spaces_region: str = Field(validation_alias="SPACES_REGION")
+    spaces_endpoint: str = Field(validation_alias="SPACES_ENDPOINT")
 
     # App
     faiss_index_path: str = "./data/faiss_index"
@@ -24,7 +28,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     model_config = SettingsConfigDict(
-        env_file=".env", 
+        env_file=os.path.join(BASE_DIR,".env"), 
         env_file_encoding="utf-8",
         extra="ignore"
     )
