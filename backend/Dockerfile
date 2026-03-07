@@ -26,9 +26,7 @@ COPY requirements.txt .
 # WHY --use-deprecated=legacy-resolver: if pinned versions still conflict,
 # the legacy resolver is more lenient and will succeed where the new one loops.
 # WHY no-build-isolation: speeds up wheel building for packages like faiss.
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels \
-    --use-deprecated=legacy-resolver \
-    -r requirements.txt
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
 
 # Pre-download fastembed model so it's baked into the image
 # WHY: avoids ~90MB download on first /ingest request at runtime
@@ -49,8 +47,8 @@ COPY --from=builder /app/requirements.txt /app
 # Copy pre-downloaded fastembed model cache
 COPY --from=builder /root/.cache /root/.cache
 
-RUN pip install --no-cache-dir --no-index --find-links=/usr/app/wheels -r requirements.txt &&\
-    rm -rf /usr/app/wheels
+RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requirements.txt &&\
+    rm -rf /app/wheels
 
 COPY . .
 
