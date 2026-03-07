@@ -7,7 +7,7 @@ import numpy as np
 import pickle
 from pathlib import Path
 from typing import List, Optional
-from langchain_gradient import GradientEmbeddings
+from langchain_community.embeddings import GradientEmbeddings
 from gradient import Gradient
 
 from config.config import get_settings
@@ -75,7 +75,10 @@ class VectorStore:
 def embed_query(query: str) -> np.ndarray:
     """Embed a single query string using the same model as document chunks."""
     response = GradientEmbeddings(
-        model=settings.embedding_model_slug
+        model=settings.embedding_model_slug,
+        gradient_access_token=settings.gradient_access_token,
+        gradient_workspace_id=settings.gradient_workspace_id
+
     )
     raw = response.embed_query(query)
     return np.array(raw, dtype=np.float32)

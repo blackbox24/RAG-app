@@ -9,13 +9,12 @@ from models.schemas import (
     ChatRequest, ChatResponse, TicketRequest,
     TicketResponse, IngestResponse
 )
-from tools.models import answer_query
+from tools.agent import run_agent
 from tools.ingest import ingest_document
-from tools.guardrails import redact_pii, add_disclaimer
 from tools.functions import create_lawyer_request
 
 app = FastAPI(
-    title="RAG Support Agent - Minimal Version",
+    title="LexAI API",
     description="AI Legal Document Assistant for African SMEs",
     version="1.0.0"
 )
@@ -31,11 +30,11 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the RAG Support Agent API!", "docs": "/docs"}
+    return {"message": "Welcome to the LexAI Support Agent API!", "docs": "/docs"}
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "message": "Backend is running!"}
+    return {"status": "ok", "version": "1.0.0", "service": "LexAI"}
 
 
 @app.post("/ingest", response_model=IngestResponse)
@@ -44,13 +43,10 @@ async def ingest(
     settings: Settings = Depends(get_settings)
 ):
     """
-    Upload a contract PDF. Pipeline:
-    1. Upload raw file to DO Spaces (persistent storage)
-    2. Extract text (pdfplumber → pytesseract fallback)
-    3. Chunk by section, embed, store in FAISS
-    4. Proactively detect risky clauses
+    Full pipeline: PDF upload → extract → chunk → embed → FAISS → risky clause scan.
+    Also uploads raw PDF to DO Spaces for persistent storage.
     """
-    if not file.filename.endswith(".pdf"):
+    if not str(file.filename).lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are supported")
 
     file_bytes = await file.read()
@@ -79,30 +75,43 @@ async def ingest(
         # Don't fail ingestion if Spaces upload fails — continue with local FAISS
         print(f"Spaces upload warning: {e}")
         raise HTTPException(status_code=500,detail="Spaces upload warning")
+    try:
+        result = ingest_document(file_bytes, str(file.filename))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
 
-    result = ingest_document(file_bytes, file.filename)
     return IngestResponse(**result)
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """
-    Main chat endpoint.
-    1. Redact PII from query before sending to model
-    2. Retrieve relevant clauses from FAISS
-    3. Generate answer with Gradient AI
-    4. Add legal disclaimer
+    Receives a question from React, calls the ADK @entrypoint directly.
+    WHY call run_agent() directly instead of HTTP to ADK:
+    No network hop. One process. Simpler. No authentication needed locally.
     """
-    clean_query = redact_pii(request.message)
-    result = answer_query(
-        query=clean_query,
-        session_id=request.session_id,
-        doc_id=request.doc_id
-    )
-    answer_with_disclaimer = add_disclaimer(result["answer"])
+    payload = {
+        "prompt": request.message,
+        "doc_id": request.doc_id,
+        "mode": request.mode or "plain"
+    }
+    result = run_agent.__wrapped__(payload, None)
+    # result = answer_query(
+    #     query=clean_query,
+    #     session_id=request.session_id,
+    #     doc_id=request.doc_id
+    # )
+    # answer_with_disclaimer = add_disclaimer(result["answer"])
+    # return ChatResponse(
+    #     answer=answer_with_disclaimer,
+    #     citations=result["citations"],
+    #     risky_flags=result["risky_flags"],
+    #     disclaimer="This is not legal advice."
+    # )
     return ChatResponse(
-        answer=answer_with_disclaimer,
+        answer=result["answer"],
         citations=result["citations"],
-        risky_flags=result["risky_flags"],
+        risky_flags=result.get("risky_flags", []),
         disclaimer="This is not legal advice."
     )
 
@@ -118,6 +127,7 @@ async def create_ticket(request: TicketRequest):
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """WHY: never expose stack traces to frontend in production."""
+    print(f"[ERROR] {exc}")
     return JSONResponse(
         status_code=500,
         content={"detail": "An internal error occurred. Please try again."}

@@ -5,6 +5,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str             # WHY: track conversation per user/doc session
     doc_id: Optional[str] = None  # WHY: scope retrieval to uploaded doc
+    mode: Optional[str] = "plain"
 
 class CitedClause(BaseModel):
     source: str                 # filename + section
@@ -30,6 +31,7 @@ class TicketResponse(BaseModel):
 
 class IngestResponse(BaseModel):
     doc_id: str
+    filename: str
     chunks_indexed: int
     detected_language: str
     risky_clauses_found: List[str]

@@ -11,8 +11,7 @@ import pytesseract
 from PIL import Image
 import numpy as np
 from langdetect import detect
-from langchain_gradient import GradientEmbeddings
-from gradientai import Gradient
+from langchain_community.embeddings import GradientEmbeddings
 
 from config.config import get_settings
 
