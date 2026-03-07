@@ -6,7 +6,8 @@ import faiss
 import numpy as np
 import pickle
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Optional
+from langchain_gradient import GradientEmbeddings
 from gradient import Gradient
 
 from config.config import get_settings
@@ -45,11 +46,15 @@ class VectorStore:
         self.index.add(matrix)
         self.metadata.extend(chunks)
 
-    def search(self, query_embedding: np.ndarray, top_k: int = 6,
-               doc_id: Optional[str] = None) -> List[dict]:
+    def search(self, query_embedding: np.ndarray, top_k: int = 6, doc_id: Optional[str] = None) -> List[dict]:
+        if self.index.ntotal == 0:
+            return []
+        
         query = query_embedding.reshape(1, -1).astype(np.float32)
         faiss.normalize_L2(query)
-        scores, indices = self.index.search(query, top_k * 3)  # fetch more, filter after
+
+        fetch_k = min(top_k * 3, self.index.ntotal)
+        scores, indices = self.index.search(query, fetch_k)  # fetch more, filter after
 
         results = []
         for score, idx in zip(scores[0], indices[0]):
@@ -68,9 +73,9 @@ class VectorStore:
         return results
 
 def embed_query(query: str) -> np.ndarray:
-    client = Gradient(model_access_key=settings.gradient_access_token)
-    response = client.embeddings.create(
-        model=settings.embedding_model_slug,
-        input=[query]
+    """Embed a single query string using the same model as document chunks."""
+    response = GradientEmbeddings(
+        model=settings.embedding_model_slug
     )
-    return np.array(response.data[0].embedding, dtype=np.float32)
+    raw = response.embed_query(query)
+    return np.array(raw, dtype=np.float32)
