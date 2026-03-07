@@ -1,0 +1,45 @@
+name: lexai
+region: nyc
+services:
+  - name: api
+    source_dir: /
+    github:
+      repo: blackbox24/RAG-app
+      branch: main
+      deploy_on_push: true   # WHY: every push auto-deploys = CI/CD for free
+    dockerfile_path: Dockerfile
+    instance_size_slug: basic-xs   # $5/mo — enough for hackathon
+    instance_count: 1
+    http_port: 8000
+    health_check:
+      http_path: /health
+    envs:
+      - key: GRADIENT_ACCESS_TOKEN
+        value: "${GRADIENT_ACCESS_TOKEN}"
+        type: SECRET           # WHY SECRET: never stored in plaintext
+      - key: GRADIENT_WORKSPACE_ID
+        value: "${GRADIENT_WORKSPACE_ID}"
+        type: SECRET
+      - key: SPACES_KEY
+        value: "${SPACES_KEY}"
+        type: SECRET
+      - key: SPACES_SECRET
+        value: "${SPACES_SECRET}"
+        type: SECRET
+      - key: SPACES_BUCKET
+        value: "lexai-docs"
+      - key: ENVIRONMENT
+        value: "production"
+
+  - name: frontend
+    source_dir: /frontend
+    github:
+      repo: blackbox24/RAG-app
+      branch: main
+      deploy_on_push: true
+    build_command: npm install && npm run build
+    output_dir: dist
+    instance_size_slug: static   # Free static hosting on DO
+    envs:
+      - key: VITE_API_URL
+        value: "${api.PUBLIC_URL}"  # DO injects this automatically

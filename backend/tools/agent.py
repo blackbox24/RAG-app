@@ -21,7 +21,7 @@ from gradient_adk import entrypoint, RequestContext
 from config.config import get_settings
 from tools.retrieval import VectorStore, embed_query
 from tools.guardrails import redact_pii, add_disclaimer
-from langchain_gradient import ChatGradient
+from langchain_openai import ChatOpenAI
 
 settings = get_settings()
 
@@ -88,9 +88,11 @@ def generate_node(state: AgentState) -> AgentState:
             "citations": []
         }
 
-    llm = ChatGradient(
+    llm = ChatOpenAI(
         model=settings.gradient_model_slug,
         max_tokens=settings.max_tokens,
+        base_url=settings.do_inference_base_url,
+        api_key=settings.gradient_access_token,
         # api_key read from GRADIENT_MODEL_ACCESS_KEY env var automatically
     )
 

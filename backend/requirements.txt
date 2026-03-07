@@ -1,10 +1,12 @@
 gradient-adk
-gradientai>=1.4.0
+
 langchain
 langchain-core
 langgraph
-langchain-gradient
-langchain-community
+langchain-openai
+fastembed
+
+httpx
 
 fastapi[standard]
 uvicorn[standard]
@@ -27,5 +29,5 @@ boto3
 tiktoken
 langdetect
 python-dotenv
-sentence-transformers
-torch
+# sentence-transformers
+# torch

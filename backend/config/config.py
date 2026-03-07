@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     gradient_access_token: str = Field(validation_alias="GRADIENT_MODEL_ACCESS_KEY")
     gradient_workspace_id: str = Field(validation_alias="GRADIENT_WORKSPACE_ID")
     gradient_model_slug: str = "llama3.1-8b-instruct"  # use available DigitalOcean model
-    embedding_model_slug: str = "bge-large-en-v1.5"
 
-    embedding_model_name: str = "all-MiniLM-L6-v2"
+    do_inference_base_url: str = "https://inference.do-ai.run/v1"
+
+    embedding_model_name: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384   # must match the model above
 
     # DigitalOcean Spaces (S3-compatible doc storage)
@@ -44,6 +45,8 @@ class Settings(BaseSettings):
         so the ChatGradient client picks it up automatically without any extra config.
         """
         os.environ["DIGITALOCEAN_INFERENCE_KEY"] = self.gradient_access_token
+        os.environ["OPENAI_API_KEY"] = self.gradient_access_token
+        os.environ["OPENAI_API_BASE"] = self.do_inference_base_url
         return self
 
 @lru_cache()  # WHY: instantiate settings once, reuse everywhere

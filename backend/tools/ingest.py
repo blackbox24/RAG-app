@@ -4,13 +4,13 @@
 import uuid
 import re
 import io
+import httpx
 from typing import List
 import pdfplumber
 import pytesseract
-from sentence_transformers import SentenceTransformer
 import numpy as np
 from langdetect import detect
-from langchain_community.embeddings import GradientEmbeddings
+from fastembed import TextEmbedding
 
 from config.config import get_settings
 
@@ -24,22 +24,6 @@ SECTION_PATTERN = re.compile(
     re.MULTILINE
 )
 
-
-_embedder: SentenceTransformer | None = None
-
-def get_embedder() -> SentenceTransformer:
-    """
-    Lazy singleton. Model downloads on first call (~80MB), then cached.
-    WHY lazy: don't block FastAPI startup if model download is slow.
-    """
-    global _embedder
-    if _embedder is None:
-        from config.config import get_settings
-        settings = get_settings()
-        _embedder = SentenceTransformer(settings.embedding_model_name)
-    return _embedder
-
-
 RISKY_PATTERNS = [
     (r"automatic.{0,20}renew", "⚠️ Automatic renewal clause"),
     (r"terminat.{0,30}without cause", "⚠️ Termination without cause"),
@@ -51,6 +35,19 @@ RISKY_PATTERNS = [
     (r"liquidated damages", "⚠️ Liquidated damages clause"),
     (r"force majeure", "ℹ️ Force majeure clause present"),
 ]
+
+_embedder: TextEmbedding | None = None
+
+def get_embedder() -> TextEmbedding:
+    global _embedder
+    if _embedder is None:
+        settings = get_settings()
+        # WHY show_progress=False: keeps production logs clean
+        _embedder = TextEmbedding(
+            model_name=settings.embedding_model_name,
+            max_length=512    # WHY 512: max tokens per chunk for this model
+        )
+    return _embedder
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """
@@ -126,20 +123,18 @@ def detect_risky_clauses(chunks: List[dict]) -> List[str]:
                 flags.append(label)
     return flags
 
-def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
+def embed_chunks(chunks: list) -> list:
     """
-    Use DigitalOcean Gradient AI embeddings.
+    Embed all chunks using local fastembed.
+    WHY list(embedder.embed(texts)): fastembed.embed() is a generator.
+    We materialise it to a list so we can index into it.
+    Returns float32 numpy arrays — exactly what FAISS expects.
     """
     embedder = get_embedder()
     texts = [c["text"] for c in chunks]
-    # Batch in groups of 32
-    embeddings = embedder.encode(
-        texts,
-        batch_size=32,
-        show_progress_bar=False,
-        normalize_embeddings=True  # WHY: pre-normalize = faster FAISS search
-    )
-    return [embeddings[i].astype(np.float32) for i in range(len(embeddings))]
+    # embed() returns a generator of numpy arrays, one per text
+    embeddings = list(embedder.embed(texts))
+    return [e.astype(np.float32) for e in embeddings]
 
 def ingest_document(file_bytes: bytes, filename: str) -> dict:
     """Full pipeline: PDF → text → chunks → embeddings → FAISS."""

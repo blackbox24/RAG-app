@@ -3,14 +3,15 @@
 # We persist to disk and reload on startup.
 
 import faiss
+import httpx
 import numpy as np
 import pickle
 from pathlib import Path
 from typing import List, Optional
-from langchain_community.embeddings import GradientEmbeddings
+from fastembed import TextEmbedding
+from tools.ingest import get_embedder
 
 from config.config import get_settings
-from tools.ingest import get_embedder
 
 settings = get_settings()
 
@@ -20,7 +21,7 @@ class VectorStore:
         self.index_path.mkdir(parents=True, exist_ok=True)
         self.faiss_file = self.index_path / "index.faiss"
         self.meta_file = self.index_path / "metadata.pkl"
-        self.dimension = 384  # BGE-large embedding dimension
+        self.dimension = 384     # BGE-large embedding dimension
         self._load()
 
     def _load(self):
@@ -75,14 +76,10 @@ class VectorStore:
 
 def embed_query(query: str) -> np.ndarray:
     """
-    Embed a single query using the same local model as chunk embedding.
-    WHY same model: query and chunks MUST use identical embedding spaces
-    for cosine similarity to be meaningful. Mixing models = garbage results.
+    WHY same embedder as chunks: query and document vectors MUST be from
+    the same model and same vector space for cosine similarity to work.
+    Mixing models produces meaningless similarity scores.
     """
     embedder = get_embedder()
-    # encode() with a single string still returns 2D array — squeeze to 1D
-    result = embedder.encode(
-        [query],
-        normalize_embeddings=True
-    )
+    result = list(embedder.embed([query]))
     return result[0].astype(np.float32)
