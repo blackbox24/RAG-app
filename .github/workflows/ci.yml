@@ -1,0 +1,46 @@
+name: Test and Deploy
+
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            
+            - name: Setup Python env
+              uses: actions/setup-python@v5
+              with: {python-version: '3.13'}
+
+            - name: Install Packages
+              run: pip install -r backend/requirements.txt
+
+            - name: Test backend
+              env:
+                GRADIENT_ACCESS_TOKEN: ${{ secrets.GRADIENT_ACCESS_TOKEN }}
+                GRADIENT_WORKSPACE_ID: ${{ secrets.GRADIENT_WORKSPACE_ID }}
+              run: |
+                cd backend
+                pytest -vv
+    
+    deploy:
+        needs: test
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            
+            - name: Install Digital Ocean cli
+              uses: digitalocean/action-doctl@v2
+              with:
+                token: ${{ secrets.DO_API_TOKEN }}
+            
+            - name: Deploy to App Platform
+              run: |
+                doctl apps create --spec infra/do_app_spec.yaml --wait
+             
