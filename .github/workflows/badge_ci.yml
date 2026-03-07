@@ -2,7 +2,7 @@ name: Badge Monitor
 
 on:
     workflow_run:
-        workflows: ["Build Application", "Create Release Tag"]
+        workflows: ["Test and deploy Backend", "Deploy Frontend"]
         types: [completed]
 
 jobs:
