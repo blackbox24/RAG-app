@@ -9,6 +9,7 @@ BASE_DIR = Path(__file__).resolve().parents[0].parent
 class Settings(BaseSettings):
     # DigitalOcean Gradient AI
     gradient_access_token: str = Field(validation_alias="GRADIENT_MODEL_ACCESS_KEY")
+    gradient_workspace_id: str = Field(validation_alias="GRADIENT_WORKSPACE_ID")
     gradient_model_slug: str = "llama3.1-8b-instruct"  # use available DigitalOcean model
     embedding_model_slug: str = "bge-large-en-v1.5"
 
@@ -35,4 +36,4 @@ class Settings(BaseSettings):
 
 @lru_cache()  # WHY: instantiate settings once, reuse everywhere
 def get_settings():
-    return Settings()
+    return Settings() # type: ignore

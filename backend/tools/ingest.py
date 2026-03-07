@@ -10,7 +10,7 @@ import pytesseract
 from PIL import Image
 import numpy as np
 from langdetect import detect
-from gradient import Gradient
+from gradientai import Gradient
 
 from config.config import get_settings
 from tools.retrieval import VectorStore
@@ -113,16 +113,16 @@ def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
     """
     Use DigitalOcean Gradient AI embeddings.
     """
-    client = Gradient(model_access_key=settings.gradient_access_token)
+    client = Gradient(access_token=settings.gradient_access_token, workspace_id = settings.gradient_workspace_id)
+    embdding_model = client.get_embeddings_model(slug=settings.embedding_model_slug)
     texts = [c["text"] for c in chunks]
     # Batch in groups of 32
     embeddings = []
     for i in range(0, len(texts), 32):
         batch = texts[i:i+32]
-        response = client.embeddings.create(
-            model=settings.embedding_model_slug,
-            input=batch
-        )
+        inputs = [{"input": text} for text in batch]
+
+        response = embdding_model(inputs=inputs)
         embeddings.extend([e.embedding for e in response.data])
     return [np.array(e, dtype=np.float32) for e in embeddings]
 
