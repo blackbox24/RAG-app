@@ -21,6 +21,7 @@ from gradient_adk import entrypoint, RequestContext
 from config.config import get_settings
 from tools.retrieval import VectorStore, embed_query
 from tools.guardrails import redact_pii, add_disclaimer
+from langchain_gradient import ChatGradient
 
 settings = get_settings()
 

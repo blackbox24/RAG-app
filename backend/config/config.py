@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, model_validator
 from functools import lru_cache
 from pathlib import Path
 import os
@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     gradient_model_slug: str = "llama3.1-8b-instruct"  # use available DigitalOcean model
     embedding_model_slug: str = "bge-large-en-v1.5"
 
+    embedding_model_name: str = "all-MiniLM-L6-v2"
+    embedding_dimension: int = 384   # must match the model above
+
     # DigitalOcean Spaces (S3-compatible doc storage)
     spaces_key: str = Field(validation_alias="SPACES_KEY")
     spaces_secret: str = Field(validation_alias="SPACES_SECRET")
@@ -21,7 +24,7 @@ class Settings(BaseSettings):
     spaces_endpoint: str = Field(validation_alias="SPACES_ENDPOINT")
 
     # App
-    faiss_index_path: str = "./data/faiss_index"
+    faiss_index_path: str = "../data/faiss_index"
     chunk_size: int = 600       # WHY 600: legal clauses avg ~400-800 chars
     chunk_overlap: int = 100    # WHY overlap: prevents splitting mid-sentence
     top_k: int = 6              # WHY 6: more context = better legal answers
@@ -33,6 +36,15 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore"
     )
+    @model_validator(mode="after")
+    def set_do_inference_key(self) -> "Settings":
+        """
+        WHY: langchain-gradient's ChatGradient reads DIGITALOCEAN_INFERENCE_KEY
+        from the environment. We inject it from our existing GRADIENT_MODEL_ACCESS_KEY
+        so the ChatGradient client picks it up automatically without any extra config.
+        """
+        os.environ["DIGITALOCEAN_INFERENCE_KEY"] = self.gradient_access_token
+        return self
 
 @lru_cache()  # WHY: instantiate settings once, reuse everywhere
 def get_settings():

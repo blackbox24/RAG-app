@@ -4,11 +4,10 @@
 import uuid
 import re
 import io
-from pathlib import Path
-from typing import List, Tuple
+from typing import List
 import pdfplumber
 import pytesseract
-from PIL import Image
+from sentence_transformers import SentenceTransformer
 import numpy as np
 from langdetect import detect
 from langchain_community.embeddings import GradientEmbeddings
@@ -24,6 +23,21 @@ SECTION_PATTERN = re.compile(
     r'(?=\n(?:SECTION|CLAUSE|ARTICLE|SCHEDULE|\d+\.|[A-Z]{2,})\s)',
     re.MULTILINE
 )
+
+
+_embedder: SentenceTransformer | None = None
+
+def get_embedder() -> SentenceTransformer:
+    """
+    Lazy singleton. Model downloads on first call (~80MB), then cached.
+    WHY lazy: don't block FastAPI startup if model download is slow.
+    """
+    global _embedder
+    if _embedder is None:
+        from config.config import get_settings
+        settings = get_settings()
+        _embedder = SentenceTransformer(settings.embedding_model_name)
+    return _embedder
 
 
 RISKY_PATTERNS = [
@@ -116,11 +130,16 @@ def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
     """
     Use DigitalOcean Gradient AI embeddings.
     """
-    embdding_model = GradientEmbeddings(model=settings.embedding_model_slug)
+    embedder = get_embedder()
     texts = [c["text"] for c in chunks]
     # Batch in groups of 32
-    raw = embdding_model.embed_documents(texts)
-    return [np.array(e, dtype=np.float32) for e in raw]
+    embeddings = embedder.encode(
+        texts,
+        batch_size=32,
+        show_progress_bar=False,
+        normalize_embeddings=True  # WHY: pre-normalize = faster FAISS search
+    )
+    return [embeddings[i].astype(np.float32) for i in range(len(embeddings))]
 
 def ingest_document(file_bytes: bytes, filename: str) -> dict:
     """Full pipeline: PDF → text → chunks → embeddings → FAISS."""

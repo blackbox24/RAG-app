@@ -27,3 +27,5 @@ boto3
 tiktoken
 langdetect
 python-dotenv
+sentence-transformers
+torch

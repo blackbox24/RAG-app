@@ -8,9 +8,9 @@ import pickle
 from pathlib import Path
 from typing import List, Optional
 from langchain_community.embeddings import GradientEmbeddings
-from gradient import Gradient
 
 from config.config import get_settings
+from tools.ingest import get_embedder
 
 settings = get_settings()
 
@@ -20,7 +20,7 @@ class VectorStore:
         self.index_path.mkdir(parents=True, exist_ok=True)
         self.faiss_file = self.index_path / "index.faiss"
         self.meta_file = self.index_path / "metadata.pkl"
-        self.dimension = 1024  # BGE-large embedding dimension
+        self.dimension = 384  # BGE-large embedding dimension
         self._load()
 
     def _load(self):
@@ -72,13 +72,17 @@ class VectorStore:
                 break
         return results
 
-def embed_query(query: str) -> np.ndarray:
-    """Embed a single query string using the same model as document chunks."""
-    response = GradientEmbeddings(
-        model=settings.embedding_model_slug,
-        gradient_access_token=settings.gradient_access_token,
-        gradient_workspace_id=settings.gradient_workspace_id
 
+def embed_query(query: str) -> np.ndarray:
+    """
+    Embed a single query using the same local model as chunk embedding.
+    WHY same model: query and chunks MUST use identical embedding spaces
+    for cosine similarity to be meaningful. Mixing models = garbage results.
+    """
+    embedder = get_embedder()
+    # encode() with a single string still returns 2D array — squeeze to 1D
+    result = embedder.encode(
+        [query],
+        normalize_embeddings=True
     )
-    raw = response.embed_query(query)
-    return np.array(raw, dtype=np.float32)
+    return result[0].astype(np.float32)
