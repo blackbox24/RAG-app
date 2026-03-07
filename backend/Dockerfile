@@ -3,7 +3,8 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DEFAULT_TIMEOUT=100
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -17,14 +18,22 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# WHY upgrade pip first: older pip has worse resolver, causes more conflicts
+RUN pip install --upgrade pip
+
 COPY requirements.txt .
 
-RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+# WHY --use-deprecated=legacy-resolver: if pinned versions still conflict,
+# the legacy resolver is more lenient and will succeed where the new one loops.
+# WHY no-build-isolation: speeds up wheel building for packages like faiss.
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels \
+    --use-deprecated=legacy-resolver \
+    -r requirements.txt
 
-RUN pip install --no-cache-dir --no-index --find-links=/app/wheels \
-        sentence-transformers torch \
-    && python -c "from sentence_transformers import SentenceTransformer; \
-                  SentenceTransformer('all-MiniLM-L6-v2')"
+# Pre-download fastembed model so it's baked into the image
+# WHY: avoids ~90MB download on first /ingest request at runtime
+RUN pip install --no-cache-dir fastembed==0.4.2 && \
+    python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
 
 FROM python:3.12-slim
 
@@ -33,34 +42,24 @@ RUN groupadd --system myuser \
 
 WORKDIR /app
 
-# Copy pre-built wheels and install — no network, no compiler needed
+
 COPY --from=builder /app/wheels /app/wheels
-COPY --from=builder /app/requirements.txt .
+COPY --from=builder /app/requirements.txt /app
 
-RUN pip install --no-cache-dir --no-index --find-links=/app/wheels -r requirements.txt \
-    && rm -rf /app/wheels
+# Copy pre-downloaded fastembed model cache
+COPY --from=builder /root/.cache /root/.cache
 
-# Copy the cached Hugging Face model from builder
-# WHY: avoids re-downloading the 90MB embedding model in the final stage
-COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+RUN pip install --no-cache-dir --no-index --find-links=/usr/app/wheels -r requirements.txt &&\
+    rm -rf /usr/app/wheels
 
 COPY . .
 
-# Create data dirs before chown so myuser owns them from the start
-# WHY: FAISS index and sample docs are written at runtime by myuser.
-# If root owns these dirs, myuser can't write to them → 500 errors.
 RUN mkdir -p data/faiss_index data/sample_docs \
     && chown -R myuser:myuser /app \
-    && chown -R myuser:myuser /root/.cache/huggingface
+    && chown -R myuser:myuser /root/.cache
 
 USER myuser
 
-# WHY 9000: your choice — just make sure docker-compose.yml and
-# DO App spec both map to 9000, not 8000.
 EXPOSE 9000
 
-# WHY app.main:app not main:app:
-# Your project structure is app/main.py, so uvicorn needs the
-# module path app.main. If main.py is at the repo root, use main:app.
-# Adjust this to match your actual file layout.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9000"]

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # DigitalOcean Gradient AI
     gradient_access_token: str = Field(validation_alias="GRADIENT_MODEL_ACCESS_KEY")
     gradient_workspace_id: str = Field(validation_alias="GRADIENT_WORKSPACE_ID")
-    gradient_model_slug: str = "llama3.1-8b-instruct"  # use available DigitalOcean model
+    gradient_model_slug: str = "llama3-8b-instruct"  # use available DigitalOcean model
 
     do_inference_base_url: str = "https://inference.do-ai.run/v1"
 

@@ -14,7 +14,7 @@ generate_node: builds prompt with context, calls ChatGradient, returns answer
 
 from typing import TypedDict, List, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_gradient import ChatGradient
+# from langchain_gradient import ChatGradient
 from langgraph.graph import StateGraph, END
 from gradient_adk import entrypoint, RequestContext
 
@@ -77,7 +77,7 @@ def generate_node(state: AgentState) -> AgentState:
     Counts toward Gradient AI usage — important for hackathon judging criteria.
     """
     chunks = state["retrieved_chunks"]
-
+    print(f"[DEBUG] model={settings.gradient_model_slug!r}  base_url={settings.do_inference_base_url!r}")
     if not chunks:
         return {
             **state,
@@ -90,7 +90,7 @@ def generate_node(state: AgentState) -> AgentState:
 
     llm = ChatOpenAI(
         model=settings.gradient_model_slug,
-        max_tokens=settings.max_tokens,
+        # max_tokens=settings.max_tokens,
         base_url=settings.do_inference_base_url,
         api_key=settings.gradient_access_token,
         # api_key read from GRADIENT_MODEL_ACCESS_KEY env var automatically

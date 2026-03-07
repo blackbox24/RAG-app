@@ -95,7 +95,7 @@ async def chat(request: ChatRequest):
         "doc_id": request.doc_id,
         "mode": request.mode or "plain"
     }
-    result = run_agent.__wrapped__(payload, None)
+    result = run_agent(payload, None)
     # result = answer_query(
     #     query=clean_query,
     #     session_id=request.session_id,
