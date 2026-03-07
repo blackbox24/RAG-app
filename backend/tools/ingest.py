@@ -3,6 +3,7 @@
 
 import uuid
 import re
+import io
 from pathlib import Path
 from typing import List, Tuple
 import pdfplumber
@@ -10,10 +11,10 @@ import pytesseract
 from PIL import Image
 import numpy as np
 from langdetect import detect
+from langchain_gradient import GradientEmbeddings
 from gradientai import Gradient
 
 from config.config import get_settings
-from tools.retrieval import VectorStore
 
 settings = get_settings()
 
@@ -25,6 +26,19 @@ SECTION_PATTERN = re.compile(
     re.MULTILINE
 )
 
+
+RISKY_PATTERNS = [
+    (r"automatic.{0,20}renew", "⚠️ Automatic renewal clause"),
+    (r"terminat.{0,30}without cause", "⚠️ Termination without cause"),
+    (r"sole discretion", "⚠️ Unilateral decision-making clause"),
+    (r"indemnif", "⚠️ Indemnification clause — review carefully"),
+    (r"waive.{0,20}right", "⚠️ Rights waiver detected"),
+    (r"non.?compete", "⚠️ Non-compete clause"),
+    (r"unlimited liability", "⚠️ Unlimited liability exposure"),
+    (r"liquidated damages", "⚠️ Liquidated damages clause"),
+    (r"force majeure", "ℹ️ Force majeure clause present"),
+]
+
 def extract_text_from_pdf(file_bytes: bytes) -> str:
     """
     Try pdfplumber first (clean text PDFs).
@@ -32,7 +46,6 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     WHY: Many African contracts are scanned — OCR fallback is essential.
     """
     try:
-        import io
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             text = "\n\n".join(
                 page.extract_text() or "" for page in pdf.pages
@@ -42,12 +55,14 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
         return text
     except Exception:
         # Fallback: OCR with pytesseract
-        import io
-        from pdf2image import convert_from_bytes
-        images = convert_from_bytes(file_bytes)
-        return "\n\n".join(
-            pytesseract.image_to_string(img) for img in images
-        )
+        try:
+            from pdf2image import convert_from_bytes
+            images = convert_from_bytes(file_bytes)
+            return "\n\n".join(
+                pytesseract.image_to_string(img) for img in images
+            )
+        except Exception as e:
+            raise ValueError(f"Could not extract text from pdf: {e}")
 
 def chunk_by_section(text: str, doc_id: str) -> List[dict]:
     """
@@ -74,26 +89,16 @@ def chunk_by_section(text: str, doc_id: str) -> List[dict]:
             # Large section: split with overlap
             for j in range(0, len(section), settings.chunk_size - settings.chunk_overlap):
                 chunk_text = section[j:j + settings.chunk_size]
-                chunks.append({
-                    "id": f"{doc_id}::section{i}::chunk{j}",
-                    "text": chunk_text,
-                    "metadata": {
-                        "doc_id": doc_id,
-                        "section_index": i,
-                        "source": f"Section {i+1}, Part {j//settings.chunk_size + 1}"
-                    }
-                })
+                if chunk_text.strip():
+                    chunks.append({
+                        "id": f"{doc_id}::s{i}::c{j}",
+                        "text": chunk_text,
+                        "metadata": {
+                            "doc_id": doc_id,
+                            "source": f"Section {i+1}, Part {j//settings.chunk_size + 1}"
+                        }
+                    })
     return chunks
-
-RISKY_PATTERNS = [
-    (r"automatic.{0,20}renew", "Automatic renewal clause detected"),
-    (r"terminat.{0,30}without cause", "Termination without cause"),
-    (r"sole discretion", "Unilateral decision-making clause"),
-    (r"indemnif", "Indemnification clause — review carefully"),
-    (r"waive.{0,20}right", "Rights waiver detected"),
-    (r"non.?compete", "Non-compete clause"),
-    (r"unlimited liability", "Unlimited liability exposure"),
-]
 
 def detect_risky_clauses(chunks: List[dict]) -> List[str]:
     """
@@ -104,40 +109,42 @@ def detect_risky_clauses(chunks: List[dict]) -> List[str]:
     for chunk in chunks:
         text_lower = chunk["text"].lower()
         for pattern, label in RISKY_PATTERNS:
-            if re.search(pattern, text_lower):
-                if label not in flags:
-                    flags.append(label)
+            if re.search(pattern, text_lower) and label not in flags:
+                flags.append(label)
     return flags
 
 def embed_chunks(chunks: List[dict]) -> List[np.ndarray]:
     """
     Use DigitalOcean Gradient AI embeddings.
     """
-    client = Gradient(access_token=settings.gradient_access_token, workspace_id = settings.gradient_workspace_id)
-    embdding_model = client.get_embeddings_model(slug=settings.embedding_model_slug)
+    embdding_model = GradientEmbeddings(model=settings.embedding_model_slug)
     texts = [c["text"] for c in chunks]
     # Batch in groups of 32
-    embeddings = []
-    for i in range(0, len(texts), 32):
-        batch = texts[i:i+32]
-        inputs = [{"input": text} for text in batch]
-
-        response = embdding_model(inputs=inputs)
-        embeddings.extend([e.embedding for e in response.data])
-    return [np.array(e, dtype=np.float32) for e in embeddings]
+    raw = embdding_model.embed_documents(texts)
+    return [np.array(e, dtype=np.float32) for e in raw]
 
 def ingest_document(file_bytes: bytes, filename: str) -> dict:
+    """Full pipeline: PDF → text → chunks → embeddings → FAISS."""
+
     doc_id = str(uuid.uuid4())[:8]
     text = extract_text_from_pdf(file_bytes)
     language = detect(text)
     chunks = chunk_by_section(text, doc_id)
+    if not chunks:
+        raise ValueError("No content could be extracted from this document")
+    
     risky_flags = detect_risky_clauses(chunks)
     embeddings = embed_chunks(chunks)
+    
+    
+    from tools.retrieval import VectorStore
     store = VectorStore()
     store.add(chunks, embeddings)
     store.save()
+    
     return {
         "doc_id": doc_id,
+        "filename": filename,
         "chunks_indexed": len(chunks),
         "detected_language": language,
         "risky_clauses_found": risky_flags
