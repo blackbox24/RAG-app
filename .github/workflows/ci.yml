@@ -35,50 +35,57 @@ jobs:
                 cd backend
                 pytest -vv
     
-    deploy:
-        needs: test
-        runs-on: ubuntu-latest
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+    # deploy:
+    #     needs: test
+    #     runs-on: ubuntu-latest
+    #     steps:
+    #         - name: Checkout
+    #           uses: actions/checkout@v4
             
-            - name: Install Digital Ocean cli
-              uses: actions/setup-python@v5
-              with:
-                python-version: "3.11"
-                cache: "pip"
+    #         - name: Install Digital Ocean cli
+    #           uses: actions/setup-python@v5
+    #           with:
+    #             python-version: "3.11"
+    #             cache: "pip"
 
-            - name: Install gradient-adk
-              run: pip install gradient-adk
+    #         - name: Install gradient-adk
+    #           run: pip install gradient-adk
 
-            - name: Verify gradient CLI installed
-              run: gradient --version
+    #         - name: Verify gradient CLI installed
+    #           run: gradient --version
 
-            - name: Write .env for deployment
-              # WHY: gradient agent deploy reads .env file for the agent's runtime env vars.
-              # We write it from GitHub Secrets so nothing sensitive is in the repo.
-              run: |
-                cat > .env << EOF
-                GRADIENT_MODEL_ACCESS_KEY=${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
-                GRADIENT_WORKSPACE_ID=${{ secrets.GRADIENT_WORKSPACE_ID }}
-                DIGITALOCEAN_TOKEN=${{ secrets.DIGITALOCEAN_TOKEN }}
-                SPACES_KEY=${{ secrets.SPACES_KEY }}
-                SPACES_SECRET=${{ secrets.SPACES_SECRET }}
-                SPACES_BUCKET=${{ secrets.SPACES_BUCKET }}
-                SPACES_REGION=${{ secrets.SPACES_REGION }}
-                SPACES_ENDPOINT=${{ secrets.SPACES_ENDPOINT }}
-                EOF
+    #         - name: Write .env for deployment
+    #           # WHY: gradient agent deploy reads .env file for the agent's runtime env vars.
+    #           # We write it from GitHub Secrets so nothing sensitive is in the repo.
+    #           run: |
+    #             cat > .env << EOF
+    #             GRADIENT_MODEL_ACCESS_KEY=${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
+    #             GRADIENT_WORKSPACE_ID=${{ secrets.GRADIENT_WORKSPACE_ID }}
+    #             DIGITALOCEAN_TOKEN=${{ secrets.DIGITALOCEAN_TOKEN }}
+    #             SPACES_KEY=${{ secrets.SPACES_KEY }}
+    #             SPACES_SECRET=${{ secrets.SPACES_SECRET }}
+    #             SPACES_BUCKET=${{ secrets.SPACES_BUCKET }}
+    #             SPACES_REGION=${{ secrets.SPACES_REGION }}
+    #             SPACES_ENDPOINT=${{ secrets.SPACES_ENDPOINT }}
+    #             EOF
 
-            - name: Deploy agent to DO Gradient
-              run: |
-                cd backend
-                gradient agent deploy
-              env:
-                DIGITALOCEAN_API_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-                GRADIENT_MODEL_ACCESS_KEY: ${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
+    #         - name: Deploy agent to DO Gradient
+    #           run: |
+    #             cd backend
+    #             gradient agent deploy
+    #           env:
+    #             DIGITALOCEAN_API_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+    #             GRADIENT_MODEL_ACCESS_KEY: ${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
+    #             GRADIENT_WORKSPACE_ID: ${{ secrets.GRADIENT_WORKSPACE_ID }}
+    #             DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+    #             SPACES_KEY: ${{ secrets.SPACES_KEY }}
+    #             SPACES_SECRET: ${{ secrets.SPACES_SECRET }}
+    #             SPACES_BUCKET: ${{ secrets.SPACES_BUCKET }}
+    #             SPACES_REGION: ${{ secrets.SPACES_REGION }}
+    #             SPACES_ENDPOINT: ${{ secrets.SPACES_ENDPOINT }}
 
-            - name: Print agent endpoint
-              run: |
-                echo "✅ Agent deployed successfully"
-                echo "Test with:"
-                echo "curl -X POST https://agents.do-ai.run/.../run -d '{\"prompt\":\"test\"}'"
+    #         - name: Print agent endpoint
+    #           run: |
+    #             echo "✅ Agent deployed successfully"
+    #             echo "Test with:"
+    #             echo "curl -X POST https://agents.do-ai.run/.../run -d '{\"prompt\":\"test\"}'"
