@@ -15,7 +15,7 @@ jobs:
               uses: 8398a7/action-slack@v3
               with:
                 status: failure
-                text: "Alert Deploy CI pipeline badge is showing failure status"
+                text: "Alert: ${{ github.workflow }} pipeline badge is showing failure status"
               env:
                 SLACK_WEBHOOK_URL: ${{secrets.SLACK_WEBHOOK_URL}}
         
@@ -28,6 +28,6 @@ jobs:
               uses: 8398a7/action-slack@v3
               with:
                 status: failure
-                text: "Alert Deploy CI pipeline badge is showing Success status"
+                text: "Alert: ${{ github.workflow }} pipeline badge is showing failure status"
               env:
                 SLACK_WEBHOOK_URL: ${{secrets.SLACK_WEBHOOK_URL}}

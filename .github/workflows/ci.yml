@@ -70,7 +70,9 @@ jobs:
                 EOF
 
             - name: Deploy agent to DO Gradient
-              run: gradient agent deploy
+              run: |
+                cd backend
+                gradient agent deploy
               env:
                 DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
                 GRADIENT_MODEL_ACCESS_KEY: ${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
