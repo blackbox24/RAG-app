@@ -36,8 +36,8 @@ jobs:
               with:
                 args: --acl public-read --follow-symlinks --delete
               env:
-                AWS_S3_BUCKET: ${{ secrets.SPACES_BUCKET }}
-                AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_KEY }}
-                AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET }}
-                AWS_S3_ENDPOINT: ${{ secrets.SPACES_ENDPOINT }}
+                AWS_S3_BUCKET: ${{ secrets.SPACES_FRONTEND_BUCKET }}
+                AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_FRONTEND_KEY }}
+                AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_FRONTEND_SECRET }}
+                AWS_S3_ENDPOINT: ${{ secrets.SPACES_FRONTEND_ENDPOINT }}
                 SOURCE_DIR: frontend/dist

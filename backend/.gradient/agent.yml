@@ -1,8 +1,3 @@
-# WHY this file: required for `gradient agent run` and `gradient agent deploy`.
-# DO NOT edit manually — use `gradient agent configure` to regenerate.
-# This is what links your local code to a workspace on DO Gradient.
-version: "1"
-agent:
-  name: lexai
-  deployment: production
-entrypoint: tools/agent.py   # WHY agent.py not main.py: entrypoint lives here
+agent_environment: lexai
+agent_name: lexai-workspace
+entrypoint_file: tools/agent.py
