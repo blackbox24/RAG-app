@@ -24,6 +24,12 @@ jobs:
               env:
                 GRADIENT_ACCESS_TOKEN: ${{ secrets.GRADIENT_ACCESS_TOKEN }}
                 GRADIENT_WORKSPACE_ID: ${{ secrets.GRADIENT_WORKSPACE_ID }}
+                DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+                SPACES_KEY: ${{ secrets.SPACES_KEY }}
+                SPACES_SECRET: ${{ secrets.SPACES_SECRET }}
+                SPACES_BUCKET: ${{ secrets.SPACES_BUCKET }}
+                SPACES_REGION: ${{ secrets.SPACES_REGION }}
+                SPACES_ENDPOINT: ${{ secrets.SPACES_ENDPOINT }}
               run: |
                 cd backend
                 pytest -vv
