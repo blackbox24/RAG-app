@@ -22,6 +22,7 @@ jobs:
 
             - name: Test backend
               env:
+                GRADIENT_MODEL_ACCESS_KEY: ${{ secrets.GRADIENT_MODEL_ACCESS_KEY }}
                 GRADIENT_ACCESS_TOKEN: ${{ secrets.GRADIENT_ACCESS_TOKEN }}
                 GRADIENT_WORKSPACE_ID: ${{ secrets.GRADIENT_WORKSPACE_ID }}
                 DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
