@@ -9,7 +9,7 @@ from models.schemas import (
     ChatRequest, ChatResponse, TicketRequest,
     TicketResponse, IngestResponse
 )
-from backend.agent import run_agent
+from agent import run_agent
 from tools.ingest import ingest_document
 from tools.functions import create_lawyer_request
 
