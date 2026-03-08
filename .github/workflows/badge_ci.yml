@@ -2,7 +2,7 @@ name: Badge Monitor
 
 on:
     workflow_run:
-        workflows: ["Test and deploy Backend", "Deploy Frontend"]
+        workflows: ["Test and deploy Backend"]
         types: [completed]
 
 jobs:
