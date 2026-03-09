@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Scale, ShieldAlert, FileText, Globe, Layers } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion as _motion, AnimatePresence } from 'framer-motion';
+const motion = _motion;
+
 import DocumentUpload from './components/DocumentUpload';
 import ChatPanel from './components/ChatPanel';
 import TicketModal from './components/TicketModal';
