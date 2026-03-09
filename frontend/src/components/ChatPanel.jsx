@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Bot, User, AlertCircle, Quote } from 'lucide-react';
-import { motion as _motion, AnimatePresence } from 'framer-motion';
-const motion = _motion;
+import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import ClauseCard from './ClauseCard';
 import InputBar from './InputBar';
