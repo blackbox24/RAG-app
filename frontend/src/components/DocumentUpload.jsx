@@ -14,7 +14,7 @@ export default function DocumentUpload({ onUploaded }) {
     try {
       const result = await uploadDocument(file);
       onUploaded(result, file.name);
-    } catch (e) {
+    } catch {
       setError('Upload failed. Please try again.');
     } finally {
       setUploading(false);
