@@ -4,7 +4,7 @@
 
 @layer base {
   body {
-    @apply bg-background text-zinc-200 antialiased selection:bg-primary-500/30 selection:text-primary-100;
+    /* Styles moved to index.html body class to prevent Tailwind @apply errors */
   }
 }
 
