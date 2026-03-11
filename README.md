@@ -12,7 +12,7 @@ LexAI is a RAG-powered AI agent that reads legal contracts (PDF), identifies ris
 |---|---|
 | **URL** | https://lexai-frontend-43cn4.ondigitalocean.app/ |
 | **Credentials** | None required — public access |
-| **Demo Video** | [Watch on YouTube](#) *(≤ 3 min)* |
+|
 
 ---
 
@@ -31,7 +31,7 @@ See [docs/SETUP.md](docs/SETUP.md) for detailed local development instructions.
 
 ## 📋 Demo Script (for Judges)
 
-1. **Upload** any PDF contract (or use the sample in `data/sample_docs/`)
+1. **Upload** any PDF contract
 2. **Ask:** *"Can the landlord terminate without notice?"*
 3. **Ask:** *"What are my payment obligations?"*
 4. **Ask:** *"Are there any automatic renewals?"*
@@ -173,15 +173,10 @@ pytest tests/ -v
 
 ## 📜 License
 
-[MIT License](LICENSE) — Copyright (c) 2026 Hope Decardi-Nelson
+[MIT License](LICENSE) — Copyright (c) 2026
 
 ---
 
-## 👥 Team
-
-| Name | Role |
-|------|------|
-| Hope Decardi-Nelson | Full-Stack Developer |
 
 ---
 
@@ -191,4 +186,3 @@ pytest tests/ -v
 - [Demo Script for Judges](docs/DEMO_SCRIPT.md)
 - [Local Setup Guide](docs/SETUP.md)
 - [API Reference](docs/DOCS.md)
-- [Learning Journey](docs/JOURNEY.md)
