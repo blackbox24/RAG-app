@@ -4,7 +4,7 @@
 > Lawyers are expensive. LexAI changes that.
 
 ## 🚀 Live Demo
-**URL:** https://lexai-xxxxx.ondigitalocean.app
+**URL:** https://lexai-frontend-43cn4.ondigitalocean.app/
 **Demo credentials:** (none required — public)
 
 ## ⚡ Run Locally (2 commands)
