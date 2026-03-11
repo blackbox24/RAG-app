@@ -1,202 +1,239 @@
 
-# RAG‑Powered Customer Support Agent  
+# ⚖️ LexAI — API Reference
 
-**Goal:** Build a chat interface that answers product/support questions by retrieving and citing relevant documentation, and that can perform one safe action (create a support ticket). Deliverables: **public repo with OSI license**, working demo (hosted or credentials), and a ≤3 minute demo video.
+> Complete reference for all backend API endpoints, request/response schemas, and integration details.
 
----
-
-## Architecture and components
-
-- **Frontend**: Minimal chat UI (React) or simple CLI for quick demo.  
-- **Backend API**: FastAPI service that accepts queries, calls the retrieval pipeline, composes prompts, calls the model, and executes safe function calls.  
-- **Knowledge base**: Document ingestion pipeline that chunks docs, creates embeddings, and upserts to a vector store.  
-- **Model layer**: Gradient/ADK model endpoint or compatible LLM SDK for generation and function calling.  
-- **Function stubs**: Safe serverless functions (create_ticket, lookup_order) implemented as local stubs or DigitalOcean Functions.  
-- **Storage**: DigitalOcean Spaces (or S3‑compatible) for raw docs; vector index hosted by Gradient or a lightweight OpenSearch/FAISS for local dev.  
-- **Deployment**: Docker for services; GitHub Actions for CI; ADK/Gradient CLI for agent deployment or DigitalOcean Apps/Functions for hosting.
+**Base URL (local):** `http://localhost:9000`
+**Base URL (production):** `https://lexai-backend-*.ondigitalocean.app`
 
 ---
 
-## Repo layout and required files
+## Endpoints
 
-```markdown
-README.md
-LICENSE (OSI approved)
-demo.mp4
-Dockerfile
-docker-compose.yml
-requirements.txt
-app/
-  main.py                # FastAPI app
-  models.py              # model wrapper & prompt templates
-  functions.py           # function handlers (create_ticket stub)
-  retrieval.py           # vectorstore client & search
-  ingest_kb.py           # ingestion script
-frontend/                # optional minimal React app
-infra/
-  adk_agent_config.yaml  # ADK/agent config example
-  do_app_spec.yaml       # DigitalOcean App spec (optional)
-tests/
-  integration_tests.py
+### `GET /` — Root
+
+Returns a welcome message and link to docs.
+
+**Response:**
+```json
+{
+  "message": "Welcome to the LexAI Support Agent API!",
+  "docs": "/docs"
+}
 ```
 
 ---
 
-### Minimal commands and exact steps to get running locally
+### `GET /health` — Health Check
 
-1. **Clone and install**
+Returns service status and version.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "version": "1.0.0",
+  "service": "LexAI"
+}
+```
+
+---
+
+### `POST /ingest` — Upload & Analyze Document
+
+Accepts a PDF file, extracts text (with OCR fallback), chunks by legal section, generates embeddings, indexes in FAISS, uploads raw PDF to DO Spaces, and scans for risky clauses.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: `file` (PDF, max 10MB)
 
 ```bash
-git clone <your-repo>
-cd your-repo
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
+curl -X POST http://localhost:9000/ingest \
+  -F "file=@contract.pdf"
 ```
 
-2.**Run ingestion (local vector store or remote)**
-
-```bash
-python app/ingest_kb.py --docs ./sample_docs --index local
+**Response (200):**
+```json
+{
+  "doc_id": "a1b2c3d4",
+  "filename": "contract.pdf",
+  "chunks_indexed": 24,
+  "detected_language": "en",
+  "risky_clauses_found": [
+    "⚠️ Automatic renewal clause",
+    "⚠️ Termination without cause",
+    "⚠️ Indemnification clause — review carefully"
+  ]
+}
 ```
 
-3.**Start backend**
+**Errors:**
 
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+| Code | Condition |
+|------|-----------|
+| 400 | Non-PDF file uploaded |
+| 400 | File exceeds 10MB |
+| 422 | No text could be extracted |
+| 500 | DO Spaces upload failure |
+
+---
+
+### `POST /chat` — Ask a Question
+
+Sends a natural-language question to the LangGraph RAG agent. The agent retrieves relevant document chunks, generates a grounded answer with citations, and appends a legal disclaimer.
+
+**Request:**
+```json
+{
+  "message": "Can the landlord terminate without notice?",
+  "session_id": "uuid-session-123",
+  "doc_id": "a1b2c3d4",
+  "mode": "plain"
+}
 ```
 
-4.**Open frontend** (if included)
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | The user's question |
+| `session_id` | string | Yes | Session tracking ID |
+| `doc_id` | string | No | Scope retrieval to a specific document |
+| `mode` | string | No | `"plain"` (default) or `"formal"` |
 
-```bash
-cd frontend
-npm install
-npm start
+**Response (200):**
+```json
+{
+  "answer": "Based on your contract, the landlord **can** terminate the agreement under specific conditions outlined in [Section 4]...\n\n⚠️ *This is not legal advice...*",
+  "citations": [
+    {
+      "source": "Section 4",
+      "text": "The Landlord may terminate this agreement by providing...",
+      "relevance_score": 0.872
+    },
+    {
+      "source": "Section 7",
+      "text": "In the event of breach, either party may...",
+      "relevance_score": 0.756
+    }
+  ],
+  "risky_flags": [],
+  "disclaimer": "This is not legal advice."
+}
+```
+
+**Response modes:**
+- `"plain"` — Simple English for business owners with no legal background. Uses bullet points.
+- `"formal"` — Formal legal analysis with precise clause references and legal terminology.
+
+---
+
+### `POST /ticket` — Request Lawyer Review
+
+Creates a tracked support ticket for lawyer escalation.
+
+**Request:**
+```json
+{
+  "user_email": "owner@mybusiness.com",
+  "doc_id": "a1b2c3d4",
+  "concern": "I'm worried about the automatic renewal clause",
+  "flagged_clauses": [
+    "⚠️ Automatic renewal clause",
+    "⚠️ Termination without cause"
+  ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `user_email` | email | Yes | Contact email (validated) |
+| `doc_id` | string | Yes | Document ID from ingestion |
+| `concern` | string | Yes | User's specific concern |
+| `flagged_clauses` | string[] | Yes | Risky clauses to include |
+
+**Response (200):**
+```json
+{
+  "ticket_id": "LEX-A1B2C3",
+  "status": "created",
+  "message": "Your lawyer review request has been submitted. Ticket LEX-A1B2C3 created at 2026-03-11 14:30. A qualified lawyer will contact owner@mybusiness.com within 24 hours."
+}
 ```
 
 ---
 
-### Starter code snippets
+## Pydantic Schemas
 
-#### ingest_kb.py
+All request/response types are defined in `backend/models/schemas.py`:
 
-```python
-# app/ingest_kb.py
-import os
-import json
-from pathlib import Path
-from typing import List
-from gradient_sdk import EmbeddingsClient, VectorStoreClient  # conceptual
-
-CHUNK_SIZE = 800
-
-def load_docs(folder: str) -> List[dict]:
-    docs = []
-    for p in Path(folder).glob("**/*.md"):
-        docs.append({"id": str(p), "text": p.read_text(encoding="utf-8")})
-    return docs
-
-def chunk_text(text: str, size: int = CHUNK_SIZE):
-    for i in range(0, len(text), size):
-        yield text[i:i+size]
-
-def main(docs_folder: str = "./sample_docs"):
-    docs = load_docs(docs_folder)
-    chunks = []
-    for d in docs:
-        for i, c in enumerate(chunk_text(d["text"])):
-            chunks.append({"id": f"{d['id']}::chunk{i}", "text": c})
-    texts = [c["text"] for c in chunks]
-    emb_client = EmbeddingsClient()  # replace with real client init
-    embeddings = emb_client.embed(texts)
-    vs = VectorStoreClient()
-    items = [{"id": c["id"], "embedding": e, "metadata": {"source": c["id"]}} for c,e in zip(chunks, embeddings)]
-    vs.upsert(items)
-    print(f"Indexed {len(items)} chunks")
-
-if __name__ == "__main__":
-    main()
-```
-
-#### models.py (query flow)
-
-```python
-# app/models.py
-from gradient_sdk import ModelClient  # conceptual
-from .retrieval import search_kb
-
-MODEL_NAME = "gpt-xyz"  # replace with actual model
-
-def render_prompt(query: str, contexts: list):
-    ctx_text = "\n\n".join([f"Source: {c['metadata']['source']}\n{c['text']}" for c in contexts])
-    return f"""You are a helpful support assistant.
-Use the following sources to answer the question. Cite sources in your answer.
-
-{ctx_text}
-
-Question: {query}
-Answer:"""
-
-def answer_query(query: str):
-    hits = search_kb(query, top_k=5)
-    prompt = render_prompt(query, hits)
-    client = ModelClient(model=MODEL_NAME)
-    resp = client.generate(prompt=prompt, max_tokens=512)
-    return resp.text, hits
-```
-
-#### functions.py (safe function stub)
-
-```python
-# app/functions.py
-def create_ticket(user_email: str, subject: str, body: str):
-    # In hackathon demo, return a mock ticket id
-    return {"ticket_id": "TICKET-12345", "status": "created"}
-```
-
-#### Dockerfile
-
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENV PYTHONUNBUFFERED=1
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-#### ADK agent config example
-
-```yaml
-# infra/adk_agent_config.yaml
-agent:
-  name: rag-support-agent
-  description: "RAG support agent using knowledge base and function calling"
-  model: gpt-xyz
-  tools:
-    - name: create_ticket
-      type: http
-      endpoint: https://your-function-endpoint/create_ticket
-  retrieval:
-    vector_store: gradient_vector_store
-    top_k: 5
-  guardrails:
-    pii_redaction: true
-```
+| Schema | Usage |
+|--------|-------|
+| `ChatRequest` | POST /chat request body |
+| `ChatResponse` | POST /chat response |
+| `CitedClause` | Citation object in ChatResponse |
+| `TicketRequest` | POST /ticket request body |
+| `TicketResponse` | POST /ticket response |
+| `IngestResponse` | POST /ingest response |
 
 ---
 
-### Deployment and CI/CD checklist
+## Interactive Docs
 
-- **Secrets**: store API keys in GitHub Secrets or DO App secrets; never commit keys.  
-- **CI**: GitHub Actions workflow to run tests, lint, build Docker image, and push to registry.  
-- **Deploy**: use DigitalOcean Apps or Functions for hosting backend and functions; use ADK/Gradient CLI to deploy agent endpoint if available.  
-- **Health checks**: simple `/health` endpoint returning status and version.  
-- **Monitoring**: log token usage and latencies; enable tracing for agent steps if platform supports it.
+FastAPI auto-generates interactive API documentation:
+
+| Tool | URL |
+|------|-----|
+| **Swagger UI** | http://localhost:9000/docs |
+| **ReDoc** | http://localhost:9000/redoc |
 
 ---
+
+## Error Handling
+
+All unhandled exceptions return a generic 500 response:
+
+```json
+{
+  "detail": "An internal error occurred. Please try again."
+}
+```
+
+Stack traces are **never** exposed to the frontend. Errors are printed server-side for debugging.
+
+---
+
+## Frontend API Client
+
+The React frontend uses Axios with a centralized client (`frontend/src/api/client.js`):
+
+```js
+import axios from 'axios';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const api = axios.create({ baseURL: BASE_URL });
+
+export const uploadDocument = async (file) => { /* POST /ingest */ };
+export const sendMessage = async ({ message, sessionId, docId }) => { /* POST /chat */ };
+export const createTicket = async ({ email, docId, concern, flaggedClauses }) => { /* POST /ticket */ };
+```
+
+Set `VITE_API_URL` in the frontend environment to point to your backend.
+
+---
+
+## Configuration
+
+All configuration is managed via environment variables loaded through Pydantic Settings.
+
+See `.env.example` for the full list of required variables.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GRADIENT_MODEL_ACCESS_KEY` | DO GenAI API key | (required) |
+| `GRADIENT_WORKSPACE_ID` | DO workspace ID | (required) |
+| `SPACES_KEY` | DO Spaces access key | (required) |
+| `SPACES_SECRET` | DO Spaces secret key | (required) |
+| `SPACES_BUCKET` | S3 bucket name | `lexai-docs` |
+| `SPACES_REGION` | Spaces region | `nyc3` |
+| `SPACES_ENDPOINT` | Spaces endpoint URL | (required) |
 
 ### Demo script and judge checklist (≤3 minutes)
 

@@ -70,6 +70,7 @@ export default function DocumentUpload({ onUploaded }) {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
+                
                 className="flex flex-col items-center justify-center space-y-4"
               >
                 <div className="relative">
