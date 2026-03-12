@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     gradient_model_slug: str = "llama3-8b-instruct"  # use available DigitalOcean model
 
     do_inference_base_url: str = "https://inference.do-ai.run/v1"
+    frontend_url: str = Field(validation_alias="FRONTEND_URL", default="https://lexai-frontend-43cn4.ondigitalocean.app")
 
     embedding_model_name: str = "BAAI/bge-small-en-v1.5"
     embedding_dimension: int = 384   # must match the model above

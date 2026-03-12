@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from config.config import get_settings
 import boto3
 from botocore.exceptions import ClientError
 
@@ -13,6 +14,8 @@ from agent import run_agent
 from tools.ingest import ingest_document
 from tools.functions import create_lawyer_request
 
+settings = get_settings()
+
 app = FastAPI(
     title="LexAI API",
     description="AI Legal Document Assistant for African SMEs",
@@ -21,7 +24,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten to your domain in production
+    allow_origins=[
+        "http://localhost:5173",                              # local dev
+        "http://localhost:3000",                              # local dev alt
+        settings.frontend_url,                                         # production — set in DO env vars
+        "https://lexai-frontend-43cn4.ondigitalocean.app",
+    ],  # tighten to your domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -82,6 +90,23 @@ async def ingest(
 
     return IngestResponse(**result)
 
+
+@app.get("/debug-cache")
+def debug_cache():
+    import os
+    cache_path = "/home/myuser/.cache/huggingface"
+    exists = os.path.exists(cache_path)
+    files = []
+    if exists:
+        for root, dirs, fs in os.walk(cache_path):
+            for f in fs:
+                files.append(os.path.join(root, f))
+    return {
+        "cache_exists": exists,
+        "file_count": len(files),
+        "HF_HOME": os.getenv("HF_HOME"),
+        "FASTEMBED_CACHE_PATH": os.getenv("FASTEMBED_CACHE_PATH"),
+    }
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
