@@ -35,6 +35,13 @@ RUN pip install --no-cache-dir fastembed==0.4.2 && \
 
 FROM python:3.12-slim
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+    
 RUN groupadd --system myuser \
     && useradd --system --gid myuser --shell /bin/bash --create-home myuser
 
