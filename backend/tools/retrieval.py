@@ -3,14 +3,14 @@
 # We persist to disk and reload on startup.
 
 import faiss
-import httpx
 import numpy as np
 import pickle
 from pathlib import Path
 from typing import List, Optional
-from fastembed import TextEmbedding
+import tempfile
 from tools.ingest import get_embedder
-
+from tools.utils import _get_s3
+from botocore.exceptions import ClientError 
 from config.config import get_settings
 
 settings = get_settings()
@@ -72,6 +72,39 @@ class VectorStore:
             if len(results) == top_k:
                 break
         return results
+    # In retrieval.py VectorStore — add these two methods
+
+def save_to_spaces(self, settings):
+    """Backup FAISS index to Spaces after every ingest."""
+    # Save index to bytes
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".faiss") as f:
+        faiss.write_index(self.index, f.name)
+        with open(f.name, "rb") as fb:
+            index_bytes = fb.read()
+    meta_bytes = pickle.dumps(self.metadata)
+    s3 = _get_s3(settings)
+    s3.put_object(Bucket=settings.spaces_bucket,
+                  Key="faiss/index.faiss", Body=index_bytes, ACL="private")
+    s3.put_object(Bucket=settings.spaces_bucket,
+                  Key="faiss/metadata.pkl", Body=meta_bytes, ACL="private")
+    print("[INFO] FAISS index backed up to Spaces")
+
+def load_from_spaces(self, settings):
+    """Restore FAISS index from Spaces on startup."""
+    try:
+        s3 = _get_s3(settings)
+        idx = s3.get_object(Bucket=settings.spaces_bucket, Key="faiss/index.faiss")
+        meta = s3.get_object(Bucket=settings.spaces_bucket, Key="faiss/metadata.pkl")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".faiss") as f:
+            f.write(idx["Body"].read())
+            self.index = faiss.read_index(f.name)
+        self.metadata = pickle.loads(meta["Body"].read())
+        print(f"[INFO] FAISS index restored: {self.index.ntotal} vectors")
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            print("[INFO] No FAISS backup found in Spaces, starting fresh")
+        else:
+            print(f"[WARNING] Could not restore FAISS from Spaces: {e}")
 
 
 def embed_query(query: str) -> np.ndarray:
