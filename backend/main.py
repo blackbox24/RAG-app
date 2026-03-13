@@ -1,27 +1,52 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from config.config import get_settings
+from config.config import get_settings,Settings
+from tools.utils import _write_job, _read_job, _get_s3
 import boto3
+import asyncio
 import uuid
-from botocore.exceptions import ClientError
-
-from config.config import get_settings, Settings
+ 
 from models.schemas import (
     ChatRequest, ChatResponse, TicketRequest,
-    TicketResponse, IngestResponse
+    TicketResponse
 )
 from agent import run_agent
 from tools.ingest import ingest_document
 from tools.functions import create_lawyer_request
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Delete job files older than 24 hours on every startup
+    try:
+        settings = get_settings()
+        s3 = _get_s3(settings)
+        response = s3.list_objects_v2(
+            Bucket=settings.spaces_bucket,
+            Prefix="jobs/"
+        )
+        cutoff = datetime.now(timezone.utc).timestamp() - (24 * 3600)
+        for obj in response.get("Contents", []):
+            if obj["LastModified"].timestamp() < cutoff:
+                s3.delete_object(
+                    Bucket=settings.spaces_bucket,
+                    Key=obj["Key"]
+                )
+    except Exception as e:
+        print(f"[WARNING] Job cleanup failed (non-fatal): {e}")
+    yield
+
 
 settings = get_settings()
-jobs = {}
+_ingest_semaphore = asyncio.Semaphore(1)
 
 app = FastAPI(
     title="LexAI API",
     description="AI Legal Document Assistant for African SMEs",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -66,67 +91,51 @@ async def ingest(
 
     # Generate job ID and return IMMEDIATELY — before any processing
     job_id = str(uuid.uuid4())[:8]
-    jobs[job_id] = {"status": "processing", "result": None, "error": None}
+    # jobs[job_id] = {"status": "processing", "result": None, "error": None}
+
+    _write_job(job_id,"processing")
 
     background_tasks.add_task(
         run_ingest_job, job_id, file_bytes, str(file.filename)
     )
 
-    # Upload to DO Spaces for persistent storage
-    # try:
-    #     s3 = boto3.client(
-    #         "s3",
-    #         endpoint_url=settings.spaces_endpoint,
-    #         aws_access_key_id=settings.spaces_key,
-    #         aws_secret_access_key=settings.spaces_secret,
-    #         region_name=settings.spaces_region
-    #     )
-    #     s3.put_object(
-    #         Bucket=settings.spaces_bucket,
-    #         Key=f"contracts/{file.filename}",
-    #         Body=file_bytes,
-    #         ACL="private"  # WHY private: contracts are sensitive documents
-    #     )
-    # except ValueError as e:
-    #     raise HTTPException(status_code=500,detail=f"Spaces upload warning: {e}")
-
-    # except ClientError as e:
-    #     # Don't fail ingestion if Spaces upload fails — continue with local FAISS
-    #     print(f"Spaces upload warning: {e}")
-    #     raise HTTPException(status_code=500,detail="Spaces upload warning")
-    # try:
-    #     result = ingest_document(file_bytes, str(file.filename))
-    # except ValueError as e:
-    #     raise HTTPException(422, str(e))
-
-    # return IngestResponse(**result)
     return {"job_id": job_id, "status": "processing"}
 
-def run_ingest_job(job_id: str, file_bytes: bytes, filename: str):
+async def run_ingest_job(job_id: str, file_bytes: bytes, filename: str):
     """Runs in background after response is sent."""
-    try:
-        # Upload to DO Spaces for persistent storage
+    async with _ingest_semaphore:
         try:
-            s3 = boto3.client(
-                "s3",
-                endpoint_url=settings.spaces_endpoint,
-                aws_access_key_id=settings.spaces_key,
-                aws_secret_access_key=settings.spaces_secret,
-                region_name=settings.spaces_region
-            )
-            s3.put_object(
-                Bucket=settings.spaces_bucket,
-                Key=f"contracts/{filename}",
-                Body=file_bytes,
-                ACL="private"  # WHY private: contracts are sensitive documents
-            )
-        except Exception as e:
-            print(f"[WARNING] Spaces upload failed (non-fatal): {e}")
+            # Upload to DO Spaces for persistent storage
+            try:
+                s3 = boto3.client(
+                    "s3",
+                    endpoint_url=settings.spaces_endpoint,
+                    aws_access_key_id=settings.spaces_key,
+                    aws_secret_access_key=settings.spaces_secret,
+                    region_name=settings.spaces_region
+                )
+                s3.put_object(
+                    Bucket=settings.spaces_bucket,
+                    Key=f"contracts/{filename}",
+                    Body=file_bytes,
+                    ACL="private"  # WHY private: contracts are sensitive documents
+                )
+            except Exception as e:
+                print(f"[WARNING] Spaces upload failed (non-fatal): {e}")
 
-        result = ingest_document(file_bytes, filename)
-        jobs[job_id] = {"status": "done", "result": result, "error": None}
-    except Exception as e:
-        jobs[job_id] = {"status": "error", "result": None, "error": str(e)}
+            loop = asyncio.get_event_loop()
+
+            result = await loop.run_in_executor(
+                None,  # uses default ThreadPoolExecutor
+                ingest_document,
+                file_bytes,
+                filename
+            )
+
+            _write_job(job_id, "done", result=result)
+        except Exception as e:
+            print(f"[ERROR] Job {job_id} failed: {e}")
+            _write_job(job_id, "error", error=str(e))
 
 
 @app.get("/ingest/status/{job_id}")
@@ -136,14 +145,11 @@ def ingest_status(job_id: str):
     WHY separate endpoint: keeps /ingest clean and lets frontend show
     a progress indicator while the heavy work happens.
     """
-    job = jobs.get(job_id)
+    job = _read_job(job_id)
     if not job:
         raise HTTPException(404, f"Job {job_id} not found")
     return {
-        "job_id": job_id,
-        "status": job["status"],      # "processing" | "done" | "error"
-        "result": job["result"],      # IngestResponse when done, null while processing
-        "error": job["error"]         # error message if failed
+        "job_id": job_id, **job        # error message if failed
     }
 
 @app.get("/debug-cache")
