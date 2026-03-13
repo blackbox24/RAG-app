@@ -6,20 +6,26 @@ import { uploadDocument } from '../api/client';
 
 export default function DocumentUpload({ onUploaded }) {
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState(null);
 
   const onDrop = useCallback(async (files) => {
     const file = files[0];
     if (!file) return;
     setUploading(true);
+    setProgress("Uploading...");
     setError(null);
     try {
-      const result = await uploadDocument(file);
+      const result = await uploadDocument(file, (attempt) => {
+        const elapsed = attempt * 2;
+        setProgress(`Analysing document... ${elapsed}s`);
+      });
       onUploaded(result, file.name);
     } catch {
       setError('Upload failed. Please try again.');
     } finally {
       setUploading(false);
+      setProgress('');
     }
   }, [onUploaded]);
 
@@ -29,6 +35,7 @@ export default function DocumentUpload({ onUploaded }) {
 
   return (
     <div className="max-w-xl w-full mx-4">
+      
       <div className="text-center mb-10">
         <motion.div
           initial={{ scale: 0 }}
@@ -78,6 +85,7 @@ export default function DocumentUpload({ onUploaded }) {
                   <Loader2 className="w-16 h-16 text-primary-500 animate-spin absolute top-0 left-0" />
                 </div>
                 <div>
+                  {progress}
                   <p className="text-xl font-semibold text-white">Analyzing Document...</p>
                   <p className="text-sm text-primary-300 mt-1">Extracting clauses and vectorizing text</p>
                 </div>
