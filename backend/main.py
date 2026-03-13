@@ -1,8 +1,9 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from config.config import get_settings
 import boto3
+import uuid
 from botocore.exceptions import ClientError
 
 from config.config import get_settings, Settings
@@ -15,6 +16,7 @@ from tools.ingest import ingest_document
 from tools.functions import create_lawyer_request
 
 settings = get_settings()
+jobs = {}
 
 app = FastAPI(
     title="LexAI API",
@@ -45,8 +47,9 @@ def health_check():
     return {"status": "ok", "version": "1.0.0", "service": "LexAI"}
 
 
-@app.post("/ingest", response_model=IngestResponse)
+@app.post("/ingest") #response_model=IngestResponse)
 async def ingest(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     settings: Settings = Depends(get_settings)
 ):
@@ -61,35 +64,87 @@ async def ingest(
     if len(file_bytes) > 10 * 1024 * 1024:  # 10MB limit
         raise HTTPException(400, "File too large. Maximum size is 10MB")
 
+    # Generate job ID and return IMMEDIATELY — before any processing
+    job_id = str(uuid.uuid4())[:8]
+    jobs[job_id] = {"status": "processing", "result": None, "error": None}
+
+    background_tasks.add_task(
+        run_ingest_job, job_id, file_bytes, str(file.filename)
+    )
+
     # Upload to DO Spaces for persistent storage
+    # try:
+    #     s3 = boto3.client(
+    #         "s3",
+    #         endpoint_url=settings.spaces_endpoint,
+    #         aws_access_key_id=settings.spaces_key,
+    #         aws_secret_access_key=settings.spaces_secret,
+    #         region_name=settings.spaces_region
+    #     )
+    #     s3.put_object(
+    #         Bucket=settings.spaces_bucket,
+    #         Key=f"contracts/{file.filename}",
+    #         Body=file_bytes,
+    #         ACL="private"  # WHY private: contracts are sensitive documents
+    #     )
+    # except ValueError as e:
+    #     raise HTTPException(status_code=500,detail=f"Spaces upload warning: {e}")
+
+    # except ClientError as e:
+    #     # Don't fail ingestion if Spaces upload fails — continue with local FAISS
+    #     print(f"Spaces upload warning: {e}")
+    #     raise HTTPException(status_code=500,detail="Spaces upload warning")
+    # try:
+    #     result = ingest_document(file_bytes, str(file.filename))
+    # except ValueError as e:
+    #     raise HTTPException(422, str(e))
+
+    # return IngestResponse(**result)
+    return {"job_id": job_id, "status": "processing"}
+
+def run_ingest_job(job_id: str, file_bytes: bytes, filename: str):
+    """Runs in background after response is sent."""
     try:
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=settings.spaces_endpoint,
-            aws_access_key_id=settings.spaces_key,
-            aws_secret_access_key=settings.spaces_secret,
-            region_name=settings.spaces_region
-        )
-        s3.put_object(
-            Bucket=settings.spaces_bucket,
-            Key=f"contracts/{file.filename}",
-            Body=file_bytes,
-            ACL="private"  # WHY private: contracts are sensitive documents
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=500,detail=f"Spaces upload warning: {e}")
+        # Upload to DO Spaces for persistent storage
+        try:
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=settings.spaces_endpoint,
+                aws_access_key_id=settings.spaces_key,
+                aws_secret_access_key=settings.spaces_secret,
+                region_name=settings.spaces_region
+            )
+            s3.put_object(
+                Bucket=settings.spaces_bucket,
+                Key=f"contracts/{filename}",
+                Body=file_bytes,
+                ACL="private"  # WHY private: contracts are sensitive documents
+            )
+        except Exception as e:
+            print(f"[WARNING] Spaces upload failed (non-fatal): {e}")
 
-    except ClientError as e:
-        # Don't fail ingestion if Spaces upload fails — continue with local FAISS
-        print(f"Spaces upload warning: {e}")
-        raise HTTPException(status_code=500,detail="Spaces upload warning")
-    try:
-        result = ingest_document(file_bytes, str(file.filename))
-    except ValueError as e:
-        raise HTTPException(422, str(e))
+        result = ingest_document(file_bytes, filename)
+        jobs[job_id] = {"status": "done", "result": result, "error": None}
+    except Exception as e:
+        jobs[job_id] = {"status": "error", "result": None, "error": str(e)}
 
-    return IngestResponse(**result)
 
+@app.get("/ingest/status/{job_id}")
+def ingest_status(job_id: str):
+    """
+    Frontend polls this every 2s until status = "done" or "error".
+    WHY separate endpoint: keeps /ingest clean and lets frontend show
+    a progress indicator while the heavy work happens.
+    """
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, f"Job {job_id} not found")
+    return {
+        "job_id": job_id,
+        "status": job["status"],      # "processing" | "done" | "error"
+        "result": job["result"],      # IngestResponse when done, null while processing
+        "error": job["error"]         # error message if failed
+    }
 
 @app.get("/debug-cache")
 def debug_cache():
